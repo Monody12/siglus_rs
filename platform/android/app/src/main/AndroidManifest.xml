@@ -4,6 +4,10 @@
 
     <!-- Required for direct filesystem access in strict no-copy import mode. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:label="@string/app_name"
@@ -11,6 +15,12 @@
         android:allowBackup="false"
         android:supportsRtl="true"
         android:theme="@style/Theme.Siglus">
+
+        <!-- Foreground keep-alive for the in-app data downloader -->
+        <service
+            android:name=".DataDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Dedicated-game bootstrap: launch straight into the game -->
         <activity
