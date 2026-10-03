@@ -63,10 +63,19 @@ public class ClannadBootstrapActivity extends Activity {
             root = defaultRoot();
         }
         if (isReady(root)) {
-            LaunchConfig.write(this, root.getAbsolutePath());
-            startGame();
+            writeLaunchAndStart(root.getAbsolutePath());
         }
         // else: setup page is already visible.
+    }
+
+    private void writeLaunchAndStart(String rootPath) {
+        try {
+            LaunchConfig.write(this, rootPath);
+        } catch (Exception e) {
+            Toast.makeText(this, "写入启动配置失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        startGame();
     }
 
     private static boolean isReady(File root) {
@@ -143,8 +152,7 @@ public class ClannadBootstrapActivity extends Activity {
         }
         Uri uri = data.getData();
         if (isReady(new File(requireNonNullPath(uri)))) {
-            LaunchConfig.write(this, requireNonNullPath(uri));
-            startGame();
+            writeLaunchAndStart(requireNonNullPath(uri));
         } else {
             Toast.makeText(this, "所选目录缺少 Gameexe.dat", Toast.LENGTH_LONG).show();
         }
