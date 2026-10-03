@@ -1026,11 +1026,14 @@ fn first_selectable_selbtn_choice(
 
 fn dispatch_selbtn_command(ctx: &mut CommandContext, form_id: u32, args: &[Value]) -> Result<bool> {
     let op = form_id as i32;
+    // GLOBAL.SELMSG (CLANNAD HD 脚本使用): 位置参数即选项文案,直接开选择。
+    let selmsg = op == constants::elm_value::GLOBAL_SELMSG;
     let ready = op == constants::elm_value::GLOBAL_SELBTN_READY
         || op == constants::elm_value::GLOBAL_SELBTN_CANCEL_READY;
     let start_now = op == constants::elm_value::GLOBAL_SELBTN
         || op == constants::elm_value::GLOBAL_SELBTN_CANCEL
-        || op == constants::elm_value::GLOBAL_SELBTN_START;
+        || op == constants::elm_value::GLOBAL_SELBTN_START
+        || selmsg;
     if !ready && !start_now {
         return Ok(false);
     }
