@@ -263,6 +263,11 @@ public class ClannadBootstrapActivity extends Activity {
     private void showSetup(String message) {
         status.setText(message);
         downloadButton.setEnabled(!busy);
+        // 断点续传:检测到暂存进度时提示"继续"
+        File staging = new File(dataDir.getParentFile(), dataDir.getName() + ".dl");
+        File[] leftovers = staging.listFiles();
+        boolean hasProgress = leftovers != null && leftovers.length > 0;
+        downloadButton.setText(hasProgress ? "继续下载数据(已有进度)" : "下载游戏数据(约 4.3GB)");
     }
 
     private void setBusy(boolean b, String message) {
@@ -327,7 +332,7 @@ public class ClannadBootstrapActivity extends Activity {
         AtomicLong doneBytes = new AtomicLong();
 
         File tmpRoot = new File(dataDir.getParentFile(), dataDir.getName() + ".dl");
-        if (tmpRoot.exists()) deleteTreeKeepingSaves(tmpRoot);
+        // 不清空暂存目录 —— 断点续传依赖其中的 .part/.done
         tmpRoot.mkdirs();
 
         List<JSONObject> partList = new ArrayList<>();
@@ -338,17 +343,29 @@ public class ClannadBootstrapActivity extends Activity {
             String name = part.getString("name");
             long size = part.getLong("size");
             String sha = part.optString("sha256", "");
+            File zip = new File(tmpRoot, name);
+            File marker = new File(tmpRoot, name + ".unzipped");
+            if (marker.isFile()) {
+                continue; // 该卷下载+解压均已完成
+            }
+            if (zip.isFile() && zip.length() == size && sha256Equals(zip, sha)) {
+                post("解压(续) " + name);
+                unzipInto(zip, tmpRoot);
+                marker.createNewFile();
+                zip.delete();
+                continue;
+            }
             JSONObject remote = findAsset(assets, name);
             if (remote == null) throw new IOException("release 缺少分卷 " + name);
-            File zip = new File(tmpRoot, name);
             post("下载 " + name + " (" + (p + 1) + "/" + partList.size() + ")");
             downloadInParallel(remote.getLong("id"), token, zip, size, grandTotal, doneBytes);
             post("校验 " + name);
             if (!sha.isEmpty() && !sha256Equals(zip, sha)) {
-                throw new IOException(name + " SHA-256 校验失败");
+                throw new IOException(name + " SHA-256 校验失败(分卷已保留,重试可续传)");
             }
             post("解压 " + name);
             unzipInto(zip, tmpRoot);
+            marker.createNewFile();
             zip.delete();
         }
 
@@ -391,16 +408,43 @@ public class ClannadBootstrapActivity extends Activity {
 
     private void downloadInParallel(long assetId, String token, File dest,
                                     long total, long grandTotal, AtomicLong doneBytes) throws Exception {
-        if (dest.exists() && dest.length() == total) {
-            doneBytes.addAndGet(total);
-            return;
-        }
         File tmp = new File(dest.getParentFile(), dest.getName() + ".part");
-        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(tmp, "rw")) {
-            raf.setLength(total);
-        }
+        File ledger = new File(dest.getParentFile(), dest.getName() + ".done");
         int chunks = (int) ((total + CHUNK - 1) / CHUNK);
-        AtomicInteger next = new AtomicInteger(0);
+        // 断点续传账本:每完成一块记一行块号;重启时跳过已完成的块。
+        java.util.Set<Integer> doneSet = new java.util.HashSet<>();
+        if (ledger.isFile() && tmp.isFile() && tmp.length() == total) {
+            try (InputStream in = new FileInputStream(ledger)) {
+                StringBuilder sb = new StringBuilder();
+                int b;
+                while ((b = in.read()) > 0) {
+                    if (b == '\n') {
+                        try { doneSet.add(Integer.parseInt(sb.toString().trim())); } catch (NumberFormatException ignored) {}
+                        sb.setLength(0);
+                    } else {
+                        sb.append((char) b);
+                    }
+                }
+                try { if (sb.length() > 0) doneSet.add(Integer.parseInt(sb.toString().trim())); } catch (NumberFormatException ignored) {}
+            }
+        } else {
+            tmp.delete();
+            ledger.delete();
+        }
+        List<Integer> missing = new ArrayList<>();
+        long preBytes = 0;
+        for (int i = 0; i < chunks; i++) {
+            if (doneSet.contains(i)) {
+                preBytes += Math.min(CHUNK, total - (long) i * CHUNK);
+            } else {
+                missing.add(i);
+            }
+        }
+        java.io.BufferedOutputStream ledgerOut = new java.io.BufferedOutputStream(
+                new FileOutputStream(ledger, true));
+        final File tmpFinal = tmp;
+        final int chunksFinal = chunks;
+        AtomicInteger cursor = new AtomicInteger(0);
         AtomicLong partDone = new AtomicLong();
         AtomicReference<IOException> failure = new AtomicReference<>();
         List<Thread> workers = new ArrayList<>();
@@ -408,16 +452,20 @@ public class ClannadBootstrapActivity extends Activity {
             Thread t = new Thread(() -> {
                 try {
                     int i;
-                    while ((i = next.getAndIncrement()) < chunks) {
-                        long start = (long) i * CHUNK;
+                    while ((i = cursor.getAndIncrement()) < missing.size()) {
+                        int chunkNo = missing.get(i);
+                        long start = (long) chunkNo * CHUNK;
                         long end = Math.min(total - 1, start + CHUNK - 1);
                         IOException err = null;
                         for (int attempt = 0; attempt < RETRIES; attempt++) {
                             try {
-                                long before = partDone.get();
-                                httpRangeTo(tmp, assetId, token, start, end);
+                                httpRangeTo(tmpFinal, assetId, token, start, end, chunksFinal == 1);
+                                synchronized (ledgerOut) {
+                                    ledgerOut.write((chunkNo + "\n").getBytes(StandardCharsets.UTF_8));
+                                    ledgerOut.flush();
+                                }
                                 partDone.addAndGet(end - start + 1);
-                                publishProgress(doneBytes, grandTotal, partDone, before);
+                                publishProgress(doneBytes, grandTotal, partDone, preBytes);
                                 err = null;
                                 break;
                             } catch (IOException ioe) {
@@ -436,13 +484,15 @@ public class ClannadBootstrapActivity extends Activity {
             t.start();
         }
         for (Thread t : workers) t.join();
-        if (failure.get() != null) throw failure.get();
+        ledgerOut.close();
+        if (failure.get() != null) throw failure.get();   // 保留 .part/.done,下次继续
+        ledger.delete();
         if (!tmp.renameTo(dest)) throw new IOException("无法完成 " + dest.getName());
     }
 
     private void publishProgress(AtomicLong doneBytes, long grandTotal,
-                                 AtomicLong partDone, long before) {
-        long now = doneBytes.get() + partDone.get();
+                                 AtomicLong partDone, long preBytes) {
+        long now = doneBytes.get() + partDone.get() + preBytes;
         ui.post(() -> {
             int pct = grandTotal > 0 ? (int) Math.min(10000L, now * 10000L / grandTotal) : 0;
             progress.setProgress(pct);
@@ -452,8 +502,10 @@ public class ClannadBootstrapActivity extends Activity {
         });
     }
 
+    /** Strict range fetch. `allow200` only for single-chunk assets where the
+     *  server may ignore Range and return the whole body. */
     private void httpRangeTo(File dest, long assetId, String token,
-                             long start, long end) throws IOException {
+                             long start, long end, boolean allow200) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(assetUrl(assetId)).openConnection();
         c.setRequestProperty("Authorization", "Bearer " + token);
         c.setRequestProperty("Accept", "application/octet-stream");
@@ -461,10 +513,13 @@ public class ClannadBootstrapActivity extends Activity {
         c.setRequestProperty("User-Agent", "ClannadHD/1.0");
         c.setConnectTimeout(20000);
         c.setReadTimeout(60000);
+        c.setInstanceFollowRedirects(true);
         int code = c.getResponseCode();
-        if (code != 206 && code != 200) {
+        // 多块下载必须 206:若服务器忽略 Range 返回 200(整卷内容),
+        // 写入偏移会毁掉文件布局 —— 视为可重试错误。
+        if (code != 206 && !(allow200 && code == 200)) {
             c.disconnect();
-            throw new IOException("HTTP " + code + " on range " + start);
+            throw new IOException("HTTP " + code + " (期望 206) on range " + start);
         }
         try (InputStream in = c.getInputStream();
              java.io.RandomAccessFile raf = new java.io.RandomAccessFile(dest, "rw")) {
