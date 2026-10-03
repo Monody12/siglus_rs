@@ -453,6 +453,30 @@ impl SiglusHost {
         }
     }
 
+    /// Shell hook (touch UIs): toggle auto-advance mode.
+    pub fn shell_auto_toggle(&mut self) {
+        if self.native_messagebox_pending() {
+            return;
+        }
+        self.vm.ctx.shell_toggle_auto_mode();
+        self.script_needs_pump = true;
+    }
+
+    /// Shell hook (touch UIs): open/close the message-back (backlog) overlay.
+    pub fn shell_backlog_toggle(&mut self) {
+        if self.native_messagebox_pending() {
+            return;
+        }
+        self.vm.ctx.shell_toggle_msg_back();
+        self.script_needs_pump = true;
+    }
+
+    /// Shell hook (touch UIs): overlay state bitfield (see
+    /// `CommandContext::shell_state`).
+    pub fn shell_state(&mut self) -> i32 {
+        self.vm.ctx.shell_state()
+    }
+
     pub fn key_down(&mut self, key: VmKey) {
         if self.native_messagebox_pending() {
             return;

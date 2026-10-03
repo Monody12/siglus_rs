@@ -398,6 +398,38 @@ pub unsafe extern "C" fn siglus_android_touch_ex(
     }
 }
 
+/// Shell hook: toggle auto-advance mode (used by the touch control bar).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn siglus_android_auto_toggle(handle: *mut c_void) {
+    if handle.is_null() {
+        return;
+    }
+    let host = unsafe { &mut *(handle as *mut SiglusHost) };
+    host.shell_auto_toggle();
+}
+
+/// Shell hook: open/close the message-back (backlog) overlay. Scrolling an
+/// open backlog is handled by the regular touch path (drag to scroll).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn siglus_android_backlog_toggle(handle: *mut c_void) {
+    if handle.is_null() {
+        return;
+    }
+    let host = unsafe { &mut *(handle as *mut SiglusHost) };
+    host.shell_backlog_toggle();
+}
+
+/// Shell hook: overlay state bitfield for the touch control bar.
+/// bit0 = backlog open, bit1 = auto mode on, bit2 = fallback dialog open.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn siglus_android_query_state(handle: *mut c_void) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    let host = unsafe { &mut *(handle as *mut SiglusHost) };
+    host.shell_state()
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn siglus_android_text_input(handle: *mut c_void, text_utf8: *const c_char) {
     let Some(host) = (unsafe { (handle as *mut SiglusHost).as_mut() }) else {

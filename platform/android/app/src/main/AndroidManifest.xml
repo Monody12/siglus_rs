@@ -12,9 +12,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Siglus">
 
-        <!-- Launcher UI -->
+        <!-- Dedicated-game bootstrap: launch straight into the game -->
         <activity
-            android:name=".LauncherActivity"
+            android:name=".ClannadBootstrapActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Siglus">
@@ -22,6 +22,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Generic multi-engine launcher UI (secondary entry) -->
+        <activity
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Siglus">
         </activity>
 
         <!-- Player / native rendering -->

@@ -104,50 +104,107 @@ public final class SiglusGameActivity extends AppCompatActivity
         surfaceView.requestFocus();
         surfaceView.setKeepScreenOn(true);
 
-        addTouchMenuButton();
+        addTouchControlBar();
 
         applyImmersive();
         installBackKeyHandling();
     }
 
     /**
-     * Touchscreens have no right click, but SiglusEngine games open their
-     * system menu (save/load/config/...) from the right mouse button. This
-     * floating button synthesizes a right click at the centre of the game
-     * viewport, mirroring what the desktop engine does.
+     * Touch-friendly control bar replacing the game's tiny message-window
+     * hotspots: 菜单 synthesizes a right click (the engine's system menu),
+     * 自动 toggles auto-advance, 回想 opens the backlog (drag scrolls while
+     * open). Button states are lit by polling the engine overlay state.
      */
-    private void addTouchMenuButton() {
-        android.widget.FrameLayout root = (android.widget.FrameLayout) findViewById(android.R.id.content);
-        android.widget.Button menuButton = new android.widget.Button(this);
-        menuButton.setText("菜单");
-        menuButton.setAlpha(0.45f);
-        menuButton.setTextSize(12f);
-        menuButton.setOnClickListener(v -> {
-            if (handle == 0 || surfaceView == null) {
-                return;
+    private android.widget.Button autoButton;
+    private android.widget.Button backlogButton;
+    private final android.os.Handler statePoller = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable statePollTask = new Runnable() {
+        @Override
+        public void run() {
+            if (handle != 0) {
+                int st = NativeSiglus.queryState(handle);
+                boolean autoOn = (st & 2) != 0;
+                boolean backlogOpen = (st & 1) != 0;
+                autoButton.setAlpha(autoOn ? 1.0f : 0.45f);
+                backlogButton.setAlpha(backlogOpen ? 1.0f : 0.45f);
             }
-            double cx = surfaceView.getWidth() / 2.0;
-            double cy = surfaceView.getHeight() / 2.0;
-            NativeSiglus.touchEx(handle, 0, cx, cy, 1);
-            NativeSiglus.touchEx(handle, 2, cx, cy, 1);
+            statePoller.postDelayed(this, 500);
+        }
+    };
+
+    private void addTouchControlBar() {
+        android.widget.FrameLayout root = (android.widget.FrameLayout) findViewById(android.R.id.content);
+        float density = getResources().getDisplayMetrics().density;
+        int padDp = (int) (10 * density);
+
+        android.widget.LinearLayout bar = new android.widget.LinearLayout(this);
+        bar.setOrientation(android.widget.LinearLayout.VERTICAL);
+        bar.setPadding(padDp, padDp, padDp, padDp);
+
+        android.widget.LinearLayout.LayoutParams bp = new android.widget.LinearLayout.LayoutParams(
+                (int) (64 * density), (int) (56 * density));
+        bp.topMargin = padDp;
+
+        android.widget.Button menuButton = makeBarButton("菜单", density);
+        menuButton.setOnClickListener(v -> synthesizeRightClick());
+        bar.addView(menuButton, bp);
+
+        autoButton = makeBarButton("自动", density);
+        autoButton.setOnClickListener(v -> {
+            if (handle != 0) NativeSiglus.autoToggle(handle);
         });
+        bar.addView(autoButton, bp);
+
+        backlogButton = makeBarButton("回想", density);
+        backlogButton.setOnClickListener(v -> {
+            if (handle != 0) NativeSiglus.backlogToggle(handle);
+        });
+        bar.addView(backlogButton, bp);
+
         android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                 android.view.Gravity.END | android.view.Gravity.BOTTOM);
-        lp.rightMargin = (int) (24 * getResources().getDisplayMetrics().density);
-        lp.bottomMargin = (int) (64 * getResources().getDisplayMetrics().density);
-        root.addView(menuButton, lp);
+        lp.rightMargin = (int) (12 * density);
+        lp.bottomMargin = (int) (48 * density);
+        root.addView(bar, lp);
+        statePoller.postDelayed(statePollTask, 500);
+    }
+
+    private android.widget.Button makeBarButton(String label, float density) {
+        android.widget.Button b = new android.widget.Button(this);
+        b.setText(label);
+        b.setAlpha(0.45f);
+        b.setTextSize(14f);
+        b.setPadding(0, 0, 0, 0);
+        b.setMinimumHeight(0);
+        b.setMinimumWidth(0);
+        return b;
+    }
+
+    /** Synthesize a right click at the centre of the game viewport. */
+    private void synthesizeRightClick() {
+        if (handle == 0 || surfaceView == null) {
+            return;
+        }
+        double cx = surfaceView.getWidth() / 2.0;
+        double cy = surfaceView.getHeight() / 2.0;
+        NativeSiglus.touchEx(handle, 0, cx, cy, 1);
+        NativeSiglus.touchEx(handle, 2, cx, cy, 1);
     }
 
     /**
-     * Android's back gesture must not kill the game outright (the Activity has no back handling of
-     * its own, so the platform default finished the Activity and tore the engine down).
-     *
-     * A single back press is forwarded to the engine as Escape, which is genuinely the game's own
-     * cancel key: the scripts use it to close menus, cancel a selection
-     * (`selbtn.cancel_enable` / `sel.cancel_enable`) and to skip. Pressing it twice within
-     * {@link #BACK_EXIT_WINDOW_MS} leaves the game, so the player is never trapped.
+     * Back gesture behaviour (state-aware):
+     * <ul>
+     *   <li>backlog open → Escape closes it;</li>
+     *   <li>fallback dialog open → Escape cancels it;</li>
+     *   <li>otherwise → a synthesized right click opens the game's own system
+     *       menu (save/load/config/...) — Siglus VMs have no ESC→menu path, the
+     *       menu is right-click only, so plain Escape would do nothing.</li>
+     * </ul>
+     * Pressing back twice within {@link #BACK_EXIT_WINDOW_MS} still leaves the
+     * game as a last-resort exit, without a nagging toast.
      */
     private void installBackKeyHandling() {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -160,11 +217,17 @@ public final class SiglusGameActivity extends AppCompatActivity
                     return;
                 }
                 lastBackMs = now;
-                if (handle != 0) {
+                if (handle == 0) {
+                    return;
+                }
+                int st = NativeSiglus.queryState(handle);
+                if ((st & 0b101) != 0) {
+                    // Backlog or fallback dialog is open: Escape dismisses it.
                     NativeSiglus.keyDown(handle, KEY_ESCAPE);
                     NativeSiglus.keyUp(handle, KEY_ESCAPE);
+                } else {
+                    synthesizeRightClick();
                 }
-                Toast.makeText(SiglusGameActivity.this, "再按一次返回键退出游戏", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -184,6 +247,7 @@ public final class SiglusGameActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {
+        statePoller.removeCallbacks(statePollTask);
         stopFrameLoop();
         destroyEngine();
         super.onDestroy();

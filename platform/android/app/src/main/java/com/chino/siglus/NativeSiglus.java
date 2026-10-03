@@ -51,6 +51,15 @@ public final class NativeSiglus {
 
     /** Extended touch with a button selector (0 = left, 1 = right) for synthesized right clicks. */
     public static native void touchEx(long handle, int phase, double xPx, double yPx, int button);
+    /** Toggle auto-advance mode (the touch control bar's 自动 button). */
+    public static native void autoToggle(long handle);
+    /** Open/close the message-back (backlog) overlay; drag scrolls while open. */
+    public static native void backlogToggle(long handle);
+    /**
+     * Overlay state bitfield for the control bar: bit0 = backlog open,
+     * bit1 = auto mode on, bit2 = fallback dialog open.
+     */
+    public static native int queryState(long handle);
     /** Forward a raw key code to the engine (0x1B = Escape, the game's cancel/back key). */
     public static native void keyDown(long handle, int keyCode);
     public static native void keyUp(long handle, int keyCode);

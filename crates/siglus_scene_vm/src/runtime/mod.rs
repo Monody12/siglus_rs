@@ -6036,6 +6036,44 @@ impl CommandContext {
         self.ui.set_sys_overlay(false, String::new());
     }
 
+    /// Shell hook (touch UIs): toggle auto-advance. Enabling auto mode turns
+    /// read-skip off, mirroring what the syscom menu actions do.
+    pub fn shell_toggle_auto_mode(&mut self) {
+        if self.globals.syscom.auto_mode.onoff {
+            self.globals.syscom.auto_mode.onoff = false;
+        } else {
+            self.globals.syscom.read_skip.onoff = false;
+            self.globals.syscom.auto_mode.onoff = true;
+        }
+    }
+
+    /// Shell hook (touch UIs): open the message-back overlay when it is closed
+    /// and close it when it is open.
+    pub fn shell_toggle_msg_back(&mut self) {
+        if self.globals.syscom.msg_back_open {
+            self.close_msg_back_proc();
+        } else {
+            self.open_msg_back_proc();
+        }
+    }
+
+    /// Shell hook (touch UIs): bitfield describing overlay state so the shell
+    /// can route gestures and light up buttons.
+    /// bit0 = message back open, bit1 = auto mode on, bit2 = fallback dialog open.
+    pub fn shell_state(&self) -> i32 {
+        let mut bits = 0;
+        if self.globals.syscom.msg_back_open {
+            bits |= 1;
+        }
+        if self.globals.syscom.auto_mode.onoff {
+            bits |= 2;
+        }
+        if self.globals.syscom.fallback_dialog.is_some() {
+            bits |= 4;
+        }
+        bits
+    }
+
     fn replay_msg_back_koe(&mut self, history_index: usize) {
         let Some(entry) = self
             .globals

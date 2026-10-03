@@ -32,6 +32,8 @@ using resize_fn_t = void (*)(void* handle, uint32_t w_px, uint32_t h_px);
 using set_surface_fn_t = int32_t (*)(void* handle, void* native_window_ptr, uint32_t w_px, uint32_t h_px);
 using touch_fn_t = void (*)(void* handle, int32_t phase, double x_px, double y_px);
 using touch_ex_fn_t = void (*)(void* handle, int32_t phase, double x_px, double y_px, int32_t button);
+using void_fn_t = void (*)(void* handle);
+using query_state_fn_t = int32_t (*)(void* handle);
 using key_fn_t = void (*)(void* handle, int32_t key_code);
 using destroy_fn_t = void (*)(void* handle);
 using init_context_fn_t = void (*)(void* java_vm_ptr, void* app_context_global_ref);
@@ -47,6 +49,9 @@ struct Api {
     set_surface_fn_t set_surface = nullptr;
     touch_fn_t touch = nullptr;
     touch_ex_fn_t touch_ex = nullptr;
+    void_fn_t auto_toggle = nullptr;
+    void_fn_t backlog_toggle = nullptr;
+    query_state_fn_t query_state = nullptr;
     key_fn_t key_down = nullptr;
     key_fn_t key_up = nullptr;
     destroy_fn_t destroy = nullptr;
@@ -95,6 +100,9 @@ static void load_api_or_log() {
         g_api.set_surface = reinterpret_cast<set_surface_fn_t>(load_symbol("siglus_android_set_surface"));
         g_api.touch = reinterpret_cast<touch_fn_t>(load_symbol("siglus_android_touch"));
         g_api.touch_ex = reinterpret_cast<touch_ex_fn_t>(load_symbol("siglus_android_touch_ex"));
+        g_api.auto_toggle = reinterpret_cast<void_fn_t>(load_symbol("siglus_android_auto_toggle"));
+        g_api.backlog_toggle = reinterpret_cast<void_fn_t>(load_symbol("siglus_android_backlog_toggle"));
+        g_api.query_state = reinterpret_cast<query_state_fn_t>(load_symbol("siglus_android_query_state"));
         g_api.key_down = reinterpret_cast<key_fn_t>(load_symbol("siglus_android_key_down"));
         g_api.key_up = reinterpret_cast<key_fn_t>(load_symbol("siglus_android_key_up"));
         g_api.destroy = reinterpret_cast<destroy_fn_t>(load_symbol("siglus_android_destroy"));
@@ -460,6 +468,33 @@ Java_com_chino_siglus_NativeSiglus_touchEx(JNIEnv*, jclass, jlong handle, jint p
     g_api.touch_ex(reinterpret_cast<void*>(handle), static_cast<int32_t>(phase),
                    static_cast<double>(x_px), static_cast<double>(y_px),
                    static_cast<int32_t>(button));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_chino_siglus_NativeSiglus_autoToggle(JNIEnv*, jclass, jlong handle) {
+    load_api_or_log();
+    if (!g_api.auto_toggle || handle == 0) {
+        return;
+    }
+    g_api.auto_toggle(reinterpret_cast<void*>(handle));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_chino_siglus_NativeSiglus_backlogToggle(JNIEnv*, jclass, jlong handle) {
+    load_api_or_log();
+    if (!g_api.backlog_toggle || handle == 0) {
+        return;
+    }
+    g_api.backlog_toggle(reinterpret_cast<void*>(handle));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_chino_siglus_NativeSiglus_queryState(JNIEnv*, jclass, jlong handle) {
+    load_api_or_log();
+    if (!g_api.query_state || handle == 0) {
+        return 0;
+    }
+    return static_cast<jint>(g_api.query_state(reinterpret_cast<void*>(handle)));
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -15,7 +15,9 @@ android {
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "com.chino.siglus"
+        // Dedicated CLANNAD app id; the generic player (com.chino.siglus) can
+        // coexist on the same device.
+        applicationId = "com.monody12.clannadhd"
         minSdk = 28
         targetSdk = 35
         versionCode = 1
