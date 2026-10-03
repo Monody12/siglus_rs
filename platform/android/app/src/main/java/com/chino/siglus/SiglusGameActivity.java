@@ -118,6 +118,12 @@ public final class SiglusGameActivity extends AppCompatActivity
      */
     private android.widget.Button autoButton;
     private android.widget.Button backlogButton;
+    private android.widget.LinearLayout controlBar;
+    private android.widget.FrameLayout.LayoutParams controlBarLp;
+    private float dragLastX;
+    private float dragLastY;
+    private boolean barDragging;
+    private int touchSlop;
     private final android.os.Handler statePoller = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable statePollTask = new Runnable() {
         @Override
@@ -132,6 +138,30 @@ public final class SiglusGameActivity extends AppCompatActivity
             statePoller.postDelayed(this, 500);
         }
     };
+
+    /**
+     * OLED burn-in protection: the control bar is the only static overlay on
+     * the screen, so it auto-hides after a few idle seconds (INVISIBLE views
+     * don't intercept touches — taps fall through to the game) and reappears
+     * on any touch. The bar is also draggable to spread the static area.
+     */
+    private final Runnable hideControlsTask = new Runnable() {
+        @Override
+        public void run() {
+            if (controlBar != null) {
+                controlBar.setVisibility(android.view.View.INVISIBLE);
+            }
+        }
+    };
+
+    private void showControls() {
+        if (controlBar == null) {
+            return;
+        }
+        controlBar.setVisibility(android.view.View.VISIBLE);
+        statePoller.removeCallbacks(hideControlsTask);
+        statePoller.postDelayed(hideControlsTask, 4000);
+    }
 
     private void addTouchControlBar() {
         android.widget.FrameLayout root = (android.widget.FrameLayout) findViewById(android.R.id.content);
@@ -168,8 +198,81 @@ public final class SiglusGameActivity extends AppCompatActivity
                 android.view.Gravity.END | android.view.Gravity.BOTTOM);
         lp.rightMargin = (int) (12 * density);
         lp.bottomMargin = (int) (48 * density);
+        android.content.SharedPreferences prefs = getSharedPreferences("controls", MODE_PRIVATE);
+        lp.rightMargin = prefs.getInt("right_margin", lp.rightMargin);
+        lp.bottomMargin = prefs.getInt("bottom_margin", lp.bottomMargin);
         root.addView(bar, lp);
+        controlBar = bar;
+        controlBarLp = lp;
+        touchSlop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
+        menuButton.setOnTouchListener(dragListener());
+        autoButton.setOnTouchListener(dragListener());
+        backlogButton.setOnTouchListener(dragListener());
+        showControls();
         statePoller.postDelayed(statePollTask, 500);
+    }
+
+    /**
+     * Long-press-then-move on any button drags the whole bar; a plain tap
+     * still reaches the button's click listener (we only consume events once
+     * the movement exceeds the touch slop).
+     */
+    private android.view.View.OnTouchListener dragListener() {
+        return (v, e) -> {
+            switch (e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    dragLastX = e.getRawX();
+                    dragLastY = e.getRawY();
+                    barDragging = false;
+                    showControls();
+                    return false;
+                case android.view.MotionEvent.ACTION_MOVE: {
+                    float dx = e.getRawX() - dragLastX;
+                    float dy = e.getRawY() - dragLastY;
+                    if (!barDragging
+                            && dx * dx + dy * dy > (float) touchSlop * touchSlop) {
+                        barDragging = true;
+                        v.setPressed(false);
+                    }
+                    if (barDragging) {
+                        slideBarBy(dx, dy);
+                        dragLastX = e.getRawX();
+                        dragLastY = e.getRawY();
+                        showControls();
+                        return true;
+                    }
+                    return false;
+                }
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    if (barDragging) {
+                        barDragging = false;
+                        android.content.SharedPreferences p =
+                                getSharedPreferences("controls", MODE_PRIVATE);
+                        p.edit()
+                                .putInt("right_margin", controlBarLp.rightMargin)
+                                .putInt("bottom_margin", controlBarLp.bottomMargin)
+                                .apply();
+                        showControls();
+                        return true;
+                    }
+                    showControls();
+                    return false;
+                default:
+                    return false;
+            }
+        };
+    }
+
+    private void slideBarBy(float dx, float dy) {
+        android.view.View root = (android.view.View) controlBar.getParent();
+        int maxX = Math.max(0, root.getWidth() - controlBar.getWidth());
+        int maxY = Math.max(0, root.getHeight() - controlBar.getHeight());
+        controlBarLp.rightMargin = Math.max(0,
+                Math.min(maxX, controlBarLp.rightMargin - Math.round(dx)));
+        controlBarLp.bottomMargin = Math.max(0,
+                Math.min(maxY, controlBarLp.bottomMargin - Math.round(dy)));
+        controlBar.setLayoutParams(controlBarLp);
     }
 
     private android.widget.Button makeBarButton(String label, float density) {
@@ -402,6 +505,9 @@ public final class SiglusGameActivity extends AppCompatActivity
     public boolean onTouch(View v, MotionEvent e) {
         if (handle == 0 || e == null) {
             return false;
+        }
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            showControls();
         }
 
         int action = e.getActionMasked();
