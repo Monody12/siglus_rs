@@ -104,8 +104,40 @@ public final class SiglusGameActivity extends AppCompatActivity
         surfaceView.requestFocus();
         surfaceView.setKeepScreenOn(true);
 
+        addTouchMenuButton();
+
         applyImmersive();
         installBackKeyHandling();
+    }
+
+    /**
+     * Touchscreens have no right click, but SiglusEngine games open their
+     * system menu (save/load/config/...) from the right mouse button. This
+     * floating button synthesizes a right click at the centre of the game
+     * viewport, mirroring what the desktop engine does.
+     */
+    private void addTouchMenuButton() {
+        android.widget.FrameLayout root = (android.widget.FrameLayout) findViewById(android.R.id.content);
+        android.widget.Button menuButton = new android.widget.Button(this);
+        menuButton.setText("菜单");
+        menuButton.setAlpha(0.45f);
+        menuButton.setTextSize(12f);
+        menuButton.setOnClickListener(v -> {
+            if (handle == 0 || surfaceView == null) {
+                return;
+            }
+            double cx = surfaceView.getWidth() / 2.0;
+            double cy = surfaceView.getHeight() / 2.0;
+            NativeSiglus.touchEx(handle, 0, cx, cy, 1);
+            NativeSiglus.touchEx(handle, 2, cx, cy, 1);
+        });
+        android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.END | android.view.Gravity.BOTTOM);
+        lp.rightMargin = (int) (24 * getResources().getDisplayMetrics().density);
+        lp.bottomMargin = (int) (64 * getResources().getDisplayMetrics().density);
+        root.addView(menuButton, lp);
     }
 
     /**

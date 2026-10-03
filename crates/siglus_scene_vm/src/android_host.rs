@@ -19,6 +19,7 @@ use crate::host::{
     default_frame_interval_ms,
 };
 use crate::render::Renderer;
+use crate::runtime::input::VmMouseButton;
 
 static ANDROID_CTX_ONCE: Once = Once::new();
 
@@ -362,6 +363,39 @@ pub unsafe extern "C" fn siglus_android_touch(
         );
     }
     host.touch(phase, vm_x, vm_y);
+}
+
+/// Same coordinate mapping as [`siglus_android_touch`], but the caller picks
+/// the mouse button. Touchscreens have no right click, so the Android shell
+/// uses this to synthesize the engine's right-button menu from an on-screen
+/// button (`button`: 0 = left, 1 = right).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn siglus_android_touch_ex(
+    handle: *mut c_void,
+    phase: i32,
+    x_px: f64,
+    y_px: f64,
+    button: i32,
+) {
+    if handle.is_null() {
+        return;
+    }
+    let host = unsafe { &mut *(handle as *mut SiglusHost) };
+    let (vx, vy, vw, vh) = host.renderer_mut().surface_viewport();
+    let (lw, lh) = host.logical_size();
+    let vm_x = ((x_px - vx as f64) / vw.max(1) as f64 * lw as f64).clamp(0.0, lw as f64);
+    let vm_y = ((y_px - vy as f64) / vh.max(1) as f64 * lh as f64).clamp(0.0, lh as f64);
+    let btn = if button == 1 {
+        VmMouseButton::Right
+    } else {
+        VmMouseButton::Left
+    };
+    host.mouse_move(vm_x, vm_y);
+    match phase {
+        0 => host.mouse_down(btn),
+        2 | 3 => host.mouse_up(btn),
+        _ => {}
+    }
 }
 
 #[unsafe(no_mangle)]
