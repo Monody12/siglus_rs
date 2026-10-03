@@ -27,3 +27,4 @@ docs/
 siglus_unknown_report.txt
 dist/
 GameData/
+.zcode-restore.md
