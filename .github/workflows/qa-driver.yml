@@ -1,0 +1,42 @@
+name: Build QA Driver (Windows)
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "crates/**"
+      - ".github/workflows/qa-driver.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa-driver-windows:
+    name: qa-driver (windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Build qa_driver
+        shell: bash
+        env:
+          RUSTFLAGS: "-A static_mut_refs"
+        run: |
+          cargo build --release -p siglus_scene_vm --bin qa_driver --target x86_64-pc-windows-msvc --verbose
+          test -f target/x86_64-pc-windows-msvc/release/qa_driver.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-driver-windows
+          path: target/x86_64-pc-windows-msvc/release/qa_driver.exe
+          if-no-files-found: error
