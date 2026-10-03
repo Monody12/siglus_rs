@@ -875,7 +875,7 @@ impl<'a> OriginalStreamReader<'a> {
         anyhow::ensure!(
             count >= 0 && count as usize <= self.remaining().len() / min_record_bytes,
             "invalid record count {count} at byte {pos} (layout {:?})",
-            self.rd.layout
+            self.layout
         );
         Ok(count as usize)
     }
