@@ -444,6 +444,7 @@ public class ClannadBootstrapActivity extends Activity {
                 new FileOutputStream(ledger, true));
         final File tmpFinal = tmp;
         final int chunksFinal = chunks;
+        final long preBytesFinal = preBytes;
         AtomicInteger cursor = new AtomicInteger(0);
         AtomicLong partDone = new AtomicLong();
         AtomicReference<IOException> failure = new AtomicReference<>();
@@ -465,7 +466,7 @@ public class ClannadBootstrapActivity extends Activity {
                                     ledgerOut.flush();
                                 }
                                 partDone.addAndGet(end - start + 1);
-                                publishProgress(doneBytes, grandTotal, partDone, preBytes);
+                                publishProgress(doneBytes, grandTotal, partDone, preBytesFinal);
                                 err = null;
                                 break;
                             } catch (IOException ioe) {
