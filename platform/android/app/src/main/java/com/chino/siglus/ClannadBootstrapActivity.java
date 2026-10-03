@@ -84,8 +84,24 @@ public class ClannadBootstrapActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        prefillTokenFromFile();
         if (!busy) {
             probe();
+        }
+    }
+
+    /** Convenience: /sdcard/clannad_token.txt prefills the token box (no typing). */
+    private void prefillTokenFromFile() {
+        try {
+            File f = new File(Environment.getExternalStorageDirectory(), "clannad_token.txt");
+            if (f.isFile()) {
+                String t = new String(java.nio.file.Files.readAllBytes(f.toPath()),
+                        StandardCharsets.UTF_8).trim();
+                if (!t.isEmpty() && tokenBox != null) {
+                    tokenBox.setText(t);
+                }
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -194,6 +210,11 @@ public class ClannadBootstrapActivity extends Activity {
         tokenBox = new EditText(this);
         tokenBox.setHint("GitHub token(仅 clannad-data 仓库只读)");
         tokenBox.setTextSize(13f);
+        // Password-style input: disables IME autocorrect/auto-capitalize, which
+        // would otherwise mangle a 93-character token (and masks it on screen).
+        tokenBox.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        tokenBox.setTypeface(android.graphics.Typeface.MONOSPACE);
 
         downloadButton = new Button(this);
         downloadButton.setText("下载游戏数据(约 4.3GB)");
