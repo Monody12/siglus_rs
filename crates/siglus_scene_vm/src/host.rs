@@ -1575,6 +1575,11 @@ impl SiglusHost {
                     self.flow.pop();
                     crate::runtime::forms::syscom::write_global_save(&self.vm.ctx);
                     self.vm.ctx.globals.system.active_flag = false;
+                    // Mirror the desktop runner: after the end-game flow the
+                    // script would just fall back to the boot scene, so signal
+                    // `step() -> true` and let the host (e.g. the Android
+                    // activity) close instead of silently restarting.
+                    self.pending_exit = true;
                     continue;
                 }
                 ProcType::GameTimerStart => {
