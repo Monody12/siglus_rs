@@ -141,7 +141,16 @@ public class ClannadBootstrapActivity extends Activity {
     }
 
     private void startGame() {
-        LaunchConfig.write(this, dataDir.getAbsolutePath());
+        launchWith(dataDir.getAbsolutePath());
+    }
+
+    private void launchWith(String rootPath) {
+        try {
+            LaunchConfig.write(this, rootPath);
+        } catch (Exception e) {
+            Toast.makeText(this, "写入启动配置失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
         startActivity(new Intent(this, SiglusGameActivity.class));
         finish();
     }
@@ -538,11 +547,12 @@ public class ClannadBootstrapActivity extends Activity {
         }
     }
 
+    /** Full recursive delete — only for staging dirs, never for the live data root. */
     private void deleteTree(File dir) {
         File[] children = dir.listFiles();
         if (children == null) return;
         for (File f : children) {
-            if (f.isDirectory()) deleteTreeKeepingSaves(f);
+            if (f.isDirectory()) deleteTree(f);
             f.delete();
         }
     }
@@ -599,12 +609,6 @@ public class ClannadBootstrapActivity extends Activity {
     }
 
     private void writeLaunchAndStart(String rootPath) {
-        try {
-            LaunchConfig.write(this, rootPath);
-        } catch (Exception e) {
-            Toast.makeText(this, "写入启动配置失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            return;
-        }
-        startGame();
+        launchWith(rootPath);
     }
 }
