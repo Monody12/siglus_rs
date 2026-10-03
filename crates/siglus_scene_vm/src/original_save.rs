@@ -868,12 +868,14 @@ impl<'a> OriginalStreamReader<'a> {
         Ok(())
     }
 
+    #[track_caller]
     pub(crate) fn count(&mut self, min_record_bytes: usize) -> Result<usize> {
         let pos = self.rd.pos;
         let count = self.i32()?;
         anyhow::ensure!(
             count >= 0 && count as usize <= self.remaining().len() / min_record_bytes,
-            "invalid record count {count} at byte {pos}"
+            "invalid record count {count} at byte {pos} (layout {:?})",
+            self.rd.layout
         );
         Ok(count as usize)
     }

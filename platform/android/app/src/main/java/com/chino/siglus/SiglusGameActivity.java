@@ -173,12 +173,32 @@ public final class SiglusGameActivity extends AppCompatActivity
         bar.setPadding(padDp, padDp, padDp, padDp);
 
         android.widget.LinearLayout.LayoutParams bp = new android.widget.LinearLayout.LayoutParams(
-                (int) (64 * density), (int) (56 * density));
+                (int) (92 * density), (int) (68 * density));
         bp.topMargin = padDp;
 
         android.widget.Button menuButton = makeBarButton("菜单", density);
         menuButton.setOnClickListener(v -> synthesizeRightClick());
         bar.addView(menuButton, bp);
+
+        // 按住快进 = 合成 Ctrl 按下/抬起(引擎的电平触发强制跳过)
+        android.widget.Button skipButton = makeBarButton("快进", density);
+        skipButton.setOnTouchListener(new android.view.View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent e) {
+                int a = e.getActionMasked();
+                if (a == android.view.MotionEvent.ACTION_DOWN && handle != 0) {
+                    NativeSiglus.keyDown(handle, 0x11); // VK Control
+                    return true;
+                }
+                if ((a == android.view.MotionEvent.ACTION_UP
+                        || a == android.view.MotionEvent.ACTION_CANCEL) && handle != 0) {
+                    NativeSiglus.keyUp(handle, 0x11);
+                    return true;
+                }
+                return false;
+            }
+        });
+        bar.addView(skipButton, bp);
 
         autoButton = makeBarButton("自动", density);
         autoButton.setOnClickListener(v -> {

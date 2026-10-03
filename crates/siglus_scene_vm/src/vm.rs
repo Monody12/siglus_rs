@@ -12625,7 +12625,31 @@ impl<'a> SceneVm<'a> {
         self.save_point = None;
         self.ctx.local_save_snapshot = None;
         self.ctx.begin_runtime_load_apply();
-        let snapshot = self.parse_original_local_stream(&local_stream)?;
+        let snapshot = match self.parse_original_local_stream(&local_stream) {
+            Ok(s) => s,
+            Err(e) => {
+                // QA diagnostics: dump the decompressed stream so the failing
+                // structure can be analyzed offline instead of guessing.
+                let dump = std::env::temp_dir().join("clannad_failed_local_stream.bin");
+                match std::fs::write(&dump, &local_stream) {
+                    Ok(_) => log::error!(
+                        "[SG_SAVELOAD] local stream parse failed ({} bytes); dumped to {}",
+                        local_stream.len(),
+                        dump.display()
+                    ),
+                    Err(werr) => log::error!(
+                        "[SG_SAVELOAD] local stream parse failed ({} bytes); dump write failed: {werr}",
+                        local_stream.len()
+                    ),
+                }
+                return Err(e.context(format!(
+                    "parse local stream ({} bytes) kind={:?} idx={}",
+                    local_stream.len(),
+                    req.kind,
+                    req.index
+                )));
+            }
+        };
         self.parse_original_local_ex_stream(&local_ex_stream)?;
         // Mirror C++ `tnm_load_local_on_file` + tail of `load_local`: re-populate
         // `m_local_save` so the loaded scene can SAVE without first taking another
